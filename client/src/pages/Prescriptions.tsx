@@ -22,11 +22,15 @@ import { Search, FileText, Clock, CheckCircle, Pill, User, Calendar, Stethoscope
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 
 export default function Prescriptions() {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPrescription, setSelectedPrescription] = useState<Prescription | null>(null);
+  const [items, setItems] = useState<Prescription[]>(mockPrescriptions);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const getStatusColor = (status: Prescription['status']) => {
     const colors = {
@@ -37,7 +41,7 @@ export default function Prescriptions() {
     return colors[status];
   };
 
-  const filteredPrescriptions = mockPrescriptions.filter(rx =>
+  const filteredPrescriptions = items.filter(rx =>
     rx.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     rx.id.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -57,6 +61,59 @@ export default function Prescriptions() {
   const handleDispense = (prescription: Prescription) => {
     toast.success(`Prescription ${prescription.id} marked as dispensed`);
     setSelectedPrescription(null);
+  };
+
+  // Create Prescription state
+  const [patientName, setPatientName] = useState('');
+  const [sex, setSex] = useState<'male'|'female'|'other'|''>('');
+  const [age, setAge] = useState('');
+  const [weight, setWeight] = useState('');
+  const [inpatient, setInpatient] = useState<'inpatient'|'outpatient'|''>('');
+  const [diagnosis, setDiagnosis] = useState('');
+  const [meds, setMeds] = useState<Array<{ name: string; strength: string; dosageForm: string; frequency: string; duration: string; quantity: string; instructions: string }>>([
+    { name: '', strength: '', dosageForm: '', frequency: '', duration: '', quantity: '', instructions: '' },
+  ]);
+
+  const addMedRow = () => setMeds((m) => [...m, { name: '', strength: '', dosageForm: '', frequency: '', duration: '', quantity: '', instructions: '' }]);
+  const removeMedRow = (idx: number) => setMeds((m) => m.filter((_, i) => i !== idx));
+  const updateMed = (idx: number, key: keyof typeof meds[number], value: string) => {
+    setMeds((m) => m.map((row, i) => i === idx ? { ...row, [key]: value } : row));
+  };
+
+  const handleCreate = () => {
+    if (!patientName || !sex || !age || !inpatient) {
+      toast.error('Please fill required patient fields');
+      return;
+    }
+    const validMeds = meds.filter(m => m.name && m.frequency && m.duration && m.quantity);
+    if (validMeds.length === 0) {
+      toast.error('Add at least one medication');
+      return;
+    }
+    const newRx: Prescription = {
+      id: `RX${String(Date.now()).slice(-6)}`,
+      patientId: 'N/A',
+      patientName,
+      doctorId: 'OPD',
+      doctorName: 'OPD Doctor',
+      date: new Date().toISOString(),
+      medications: validMeds.map((m, idx) => ({
+        id: `M${idx + 1}`,
+        name: `${m.name}${m.strength ? ' ' + m.strength : ''}${m.dosageForm ? ' ' + m.dosageForm : ''}`,
+        dosage: m.strength || '-',
+        frequency: m.frequency,
+        duration: m.duration,
+        quantity: Number(m.quantity) || 0,
+        instructions: m.instructions,
+      })),
+      status: 'pending',
+      notes: diagnosis,
+    };
+    setItems((prev) => [newRx, ...prev]);
+    toast.success('Prescription created');
+    // reset
+    setPatientName(''); setSex(''); setAge(''); setWeight(''); setInpatient(''); setDiagnosis(''); setMeds([{ name: '', strength: '', dosageForm: '', frequency: '', duration: '', quantity: '', instructions: '' }]);
+    setCreateOpen(false);
   };
 
   const PrescriptionCard = ({ prescription }: { prescription: Prescription }) => (
@@ -105,8 +162,8 @@ export default function Prescriptions() {
   return (
     <DashboardLayout title="Prescriptions" subtitle="Manage and dispense patient prescriptions">
       <div className="space-y-6">
-        {/* Search */}
-        <div className="flex gap-4">
+        {/* Search + Actions */}
+        <div className="flex gap-4 justify-between">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -116,6 +173,9 @@ export default function Prescriptions() {
               className="pl-9"
             />
           </div>
+          {user?.role === 'opd' && (
+            <Button onClick={() => setCreateOpen(true)}>Create Prescription</Button>
+          )}
         </div>
 
         {/* Stats */}
@@ -307,6 +367,93 @@ export default function Prescriptions() {
                 </div>
               </>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Create Prescription Dialog */}
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogContent className="max-w-4xl">
+            <DialogHeader>
+              <DialogTitle>Create Prescription</DialogTitle>
+              <DialogDescription>Enter patient details and medications to send to Injection Room</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-6 py-2">
+              {/* Patient Info */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="space-y-1">
+                  <Label>Patient Name</Label>
+                  <Input value={patientName} onChange={(e) => setPatientName(e.target.value)} placeholder="Full name" />
+                </div>
+                <div className="space-y-1">
+                  <Label>Sex</Label>
+                  <div className="grid grid-cols-3 gap-2 text-sm">
+                    <Button variant={sex==='male'? 'default':'outline'} onClick={()=>setSex('male')}>Male</Button>
+                    <Button variant={sex==='female'? 'default':'outline'} onClick={()=>setSex('female')}>Female</Button>
+                    <Button variant={sex==='other'? 'default':'outline'} onClick={()=>setSex('other')}>Other</Button>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label>Age</Label>
+                  <Input type="number" value={age} onChange={(e) => setAge(e.target.value)} placeholder="Years" />
+                </div>
+                <div className="space-y-1">
+                  <Label>Weight (kg)</Label>
+                  <Input type="number" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="kg" />
+                </div>
+                <div className="space-y-1 col-span-2 md:col-span-1">
+                  <Label>Patient Type</Label>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <Button variant={inpatient==='outpatient'? 'default':'outline'} onClick={()=>setInpatient('outpatient')}>Outpatient</Button>
+                    <Button variant={inpatient==='inpatient'? 'default':'outline'} onClick={()=>setInpatient('inpatient')}>Inpatient</Button>
+                  </div>
+                </div>
+                <div className="col-span-2 md:col-span-3 space-y-1">
+                  <Label>Diagnosis (if not ICD)</Label>
+                  <Textarea value={diagnosis} onChange={(e)=>setDiagnosis(e.target.value)} placeholder="Free-text diagnosis" />
+                </div>
+              </div>
+
+              {/* Medications Table */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium">Medications</h4>
+                  <Button size="sm" variant="outline" onClick={addMedRow}>Add Medication</Button>
+                </div>
+                <div className="rounded-lg border border-border overflow-auto">
+                  <div className="grid grid-cols-12 gap-2 p-3 text-xs text-muted-foreground font-medium bg-muted/50">
+                    <div className="col-span-2">Drug name</div>
+                    <div className="col-span-1">Strength</div>
+                    <div className="col-span-2">Dosage form</div>
+                    <div className="col-span-2">Frequency</div>
+                    <div className="col-span-1">Duration</div>
+                    <div className="col-span-1">Quantity</div>
+                    <div className="col-span-3">How to use / other info</div>
+                    <div className="col-span-0" />
+                  </div>
+                  <div className="p-3 space-y-2">
+                    {meds.map((m, idx) => (
+                      <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                        <div className="col-span-2"><Input value={m.name} onChange={(e)=>updateMed(idx,'name',e.target.value)} placeholder="e.g., Amoxicillin" /></div>
+                        <div className="col-span-1"><Input value={m.strength} onChange={(e)=>updateMed(idx,'strength',e.target.value)} placeholder="500mg" /></div>
+                        <div className="col-span-2"><Input value={m.dosageForm} onChange={(e)=>updateMed(idx,'dosageForm',e.target.value)} placeholder="tablet, syrup" /></div>
+                        <div className="col-span-2"><Input value={m.frequency} onChange={(e)=>updateMed(idx,'frequency',e.target.value)} placeholder="3x/day" /></div>
+                        <div className="col-span-1"><Input value={m.duration} onChange={(e)=>updateMed(idx,'duration',e.target.value)} placeholder="5d" /></div>
+                        <div className="col-span-1"><Input type="number" value={m.quantity} onChange={(e)=>updateMed(idx,'quantity',e.target.value)} placeholder="10" /></div>
+                        <div className="col-span-3"><Input value={m.instructions} onChange={(e)=>updateMed(idx,'instructions',e.target.value)} placeholder="After meals, etc." /></div>
+                        <div className="col-span-12 md:col-span-1 flex justify-end">
+                          <Button size="sm" variant="ghost" onClick={()=>removeMedRow(idx)}>Remove</Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={()=>setCreateOpen(false)}>Cancel</Button>
+                <Button onClick={handleCreate}>Create Prescription</Button>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
       </div>

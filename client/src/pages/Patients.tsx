@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { mockPatients } from '@/data/mockData';
 import { Patient } from '@/types/clinic';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { listPatients as apiListPatients, createPatient as apiCreatePatient, updatePatient as apiUpdatePatient } from '@/services/patients';
+import { toast } from 'sonner';
 import {
   Table,
   TableBody,
@@ -29,12 +31,60 @@ export default function Patients() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [isNewPatientOpen, setIsNewPatientOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editing, setEditing] = useState<Patient | null>(null);
+  const qc = useQueryClient();
 
-  const filteredPatients = mockPatients.filter(patient =>
-    patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    patient.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    patient.phone.includes(searchTerm)
-  );
+  const [form, setForm] = useState({
+    name: '',
+    dateOfBirth: '',
+    gender: '',
+    phone: '',
+    email: '',
+    address: '',
+    bloodType: '',
+    allergies: '',
+  });
+
+  const [editForm, setEditForm] = useState({
+    name: '',
+    dateOfBirth: '',
+    gender: '',
+    phone: '',
+    email: '',
+    address: '',
+    bloodType: '',
+    allergies: '',
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: any }) => apiUpdatePatient(id, body),
+    onSuccess: () => {
+      toast.success('Patient updated');
+      setIsEditOpen(false);
+      setEditing(null);
+      qc.invalidateQueries({ queryKey: ['patients'] });
+    },
+    onError: (e: any) => toast.error(e?.message || 'Failed to update patient'),
+  });
+
+  const { data: patients = [], isLoading } = useQuery({
+    queryKey: ['patients', { q: searchTerm }],
+    queryFn: () => apiListPatients({ q: searchTerm, limit: 100 }),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: apiCreatePatient,
+    onSuccess: () => {
+      toast.success('Patient registered');
+      setIsNewPatientOpen(false);
+      setForm({ name: '', dateOfBirth: '', gender: '', phone: '', email: '', address: '', bloodType: '', allergies: '' });
+      qc.invalidateQueries({ queryKey: ['patients'] });
+    },
+    onError: (e: any) => toast.error(e?.message || 'Failed to register patient'),
+  });
+
+  const filteredPatients = patients;
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -85,15 +135,15 @@ export default function Patients() {
               <div className="grid grid-cols-2 gap-4 py-4">
                 <div className="space-y-2">
                   <Label htmlFor="name">Full Name</Label>
-                  <Input id="name" placeholder="Enter full name" />
+                  <Input id="name" placeholder="Enter full name" value={form.name} onChange={(e)=>setForm(f=>({...f,name:e.target.value}))} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="dob">Date of Birth</Label>
-                  <Input id="dob" type="date" />
+                  <Input id="dob" type="date" value={form.dateOfBirth} onChange={(e)=>setForm(f=>({...f,dateOfBirth:e.target.value}))} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="gender">Gender</Label>
-                  <select id="gender" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                  <select id="gender" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={form.gender} onChange={(e)=>setForm(f=>({...f,gender:e.target.value}))}>
                     <option value="">Select gender</option>
                     <option value="male">Male</option>
                     <option value="female">Female</option>
@@ -102,15 +152,15 @@ export default function Patients() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="phone">Phone Number</Label>
-                  <Input id="phone" placeholder="+1 234-567-8900" />
+                  <Input id="phone" placeholder="+1 234-567-8900" value={form.phone} onChange={(e)=>setForm(f=>({...f,phone:e.target.value}))} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email (Optional)</Label>
-                  <Input id="email" type="email" placeholder="patient@email.com" />
+                  <Input id="email" type="email" placeholder="patient@email.com" value={form.email} onChange={(e)=>setForm(f=>({...f,email:e.target.value}))} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="bloodType">Blood Type</Label>
-                  <select id="bloodType" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                  <select id="bloodType" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={form.bloodType} onChange={(e)=>setForm(f=>({...f,bloodType:e.target.value}))}>
                     <option value="">Select blood type</option>
                     <option value="A+">A+</option>
                     <option value="A-">A-</option>
@@ -124,16 +174,25 @@ export default function Patients() {
                 </div>
                 <div className="col-span-2 space-y-2">
                   <Label htmlFor="address">Address</Label>
-                  <Input id="address" placeholder="Enter full address" />
+                  <Input id="address" placeholder="Enter full address" value={form.address} onChange={(e)=>setForm(f=>({...f,address:e.target.value}))} />
                 </div>
                 <div className="col-span-2 space-y-2">
                   <Label htmlFor="allergies">Allergies (comma separated)</Label>
-                  <Input id="allergies" placeholder="e.g., Penicillin, Aspirin" />
+                  <Input id="allergies" placeholder="e.g., Penicillin, Aspirin" value={form.allergies} onChange={(e)=>setForm(f=>({...f,allergies:e.target.value}))} />
                 </div>
               </div>
               <div className="flex justify-end gap-3">
                 <Button variant="outline" onClick={() => setIsNewPatientOpen(false)}>Cancel</Button>
-                <Button onClick={() => setIsNewPatientOpen(false)}>Register Patient</Button>
+                <Button onClick={() => createMutation.mutate({
+                  name: form.name,
+                  dateOfBirth: form.dateOfBirth,
+                  gender: form.gender as any,
+                  phone: form.phone,
+                  email: form.email || undefined,
+                  address: form.address,
+                  bloodType: form.bloodType || undefined,
+                  allergies: form.allergies ? form.allergies.split(',').map(s=>s.trim()).filter(Boolean) : []
+                })} disabled={createMutation.isPending}>Register Patient</Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -221,7 +280,20 @@ export default function Patients() {
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon">
+                      <Button variant="ghost" size="icon" onClick={() => {
+                        setEditing(patient);
+                        setEditForm({
+                          name: patient.name,
+                          dateOfBirth: patient.dateOfBirth.slice(0,10),
+                          gender: patient.gender,
+                          phone: patient.phone,
+                          email: patient.email || '',
+                          address: patient.address,
+                          bloodType: patient.bloodType || '',
+                          allergies: (patient.allergies || []).join(', '),
+                        });
+                        setIsEditOpen(true);
+                      }}>
                         <Edit className="h-4 w-4" />
                       </Button>
                     </div>
@@ -231,7 +303,7 @@ export default function Patients() {
             </TableBody>
           </Table>
 
-          {filteredPatients.length === 0 && (
+          {(!isLoading && filteredPatients.length === 0) && (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
               <User className="h-12 w-12 mb-3 opacity-50" />
               <p>No patients found</p>
@@ -306,10 +378,86 @@ export default function Patients() {
 
                 <div className="flex justify-end gap-3">
                   <Button variant="outline" onClick={() => setSelectedPatient(null)}>Close</Button>
-                  <Button>Schedule Appointment</Button>
                 </div>
               </>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Patient Dialog */}
+        <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Edit Patient</DialogTitle>
+              <DialogDescription>Update patient information</DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="e_name">Full Name</Label>
+                <Input id="e_name" value={editForm.name} onChange={(e)=>setEditForm(f=>({...f,name:e.target.value}))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="e_dob">Date of Birth</Label>
+                <Input id="e_dob" type="date" value={editForm.dateOfBirth} onChange={(e)=>setEditForm(f=>({...f,dateOfBirth:e.target.value}))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="e_gender">Gender</Label>
+                <select id="e_gender" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={editForm.gender} onChange={(e)=>setEditForm(f=>({...f,gender:e.target.value}))}>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="e_phone">Phone</Label>
+                <Input id="e_phone" value={editForm.phone} onChange={(e)=>setEditForm(f=>({...f,phone:e.target.value}))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="e_email">Email</Label>
+                <Input id="e_email" type="email" value={editForm.email} onChange={(e)=>setEditForm(f=>({...f,email:e.target.value}))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="e_blood">Blood Type</Label>
+                <select id="e_blood" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={editForm.bloodType} onChange={(e)=>setEditForm(f=>({...f,bloodType:e.target.value}))}>
+                  <option value="">Select blood type</option>
+                  <option value="A+">A+</option>
+                  <option value="A-">A-</option>
+                  <option value="B+">B+</option>
+                  <option value="B-">B-</option>
+                  <option value="O+">O+</option>
+                  <option value="O-">O-</option>
+                  <option value="AB+">AB+</option>
+                  <option value="AB-">AB-</option>
+                </select>
+              </div>
+              <div className="col-span-2 space-y-2">
+                <Label htmlFor="e_address">Address</Label>
+                <Input id="e_address" value={editForm.address} onChange={(e)=>setEditForm(f=>({...f,address:e.target.value}))} />
+              </div>
+              <div className="col-span-2 space-y-2">
+                <Label htmlFor="e_allergies">Allergies (comma separated)</Label>
+                <Input id="e_allergies" value={editForm.allergies} onChange={(e)=>setEditForm(f=>({...f,allergies:e.target.value}))} />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>
+              <Button onClick={() => {
+                if (!editing) return;
+                updateMutation.mutate({
+                  id: editing.id,
+                  body: {
+                    name: editForm.name,
+                    dateOfBirth: editForm.dateOfBirth,
+                    gender: editForm.gender as any,
+                    phone: editForm.phone,
+                    email: editForm.email || undefined,
+                    address: editForm.address,
+                    bloodType: editForm.bloodType || undefined,
+                    allergies: editForm.allergies ? editForm.allergies.split(',').map(s=>s.trim()).filter(Boolean) : [],
+                  }
+                });
+              }} disabled={updateMutation.isPending}>Save Changes</Button>
+            </div>
           </DialogContent>
         </Dialog>
       </div>

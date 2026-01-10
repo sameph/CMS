@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { mockAppointments, mockPatients } from '@/data/mockData';
 import { Appointment } from '@/types/clinic';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,12 +23,49 @@ import {
 } from '@/components/ui/select';
 import { Plus, Clock, User, CalendarDays, Search, Filter } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { listAppointments as apiListAppointments, createAppointment as apiCreateAppointment, checkInAppointment } from '@/services/appointments';
+import { getPatients as getPatientOptions } from '@/services/labRequests';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 
 export default function Appointments() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isNewAppointmentOpen, setIsNewAppointmentOpen] = useState(false);
+  const qc = useQueryClient();
+  const { user } = useAuth();
+
+  const [form, setForm] = useState({
+    patientId: '',
+    patientName: '',
+    type: '' as Appointment['type'] | '',
+    date: '',
+    time: '',
+    notes: '',
+  });
+
+  const { data: patientOptions = [] } = useQuery({
+    queryKey: ['patient-options'],
+    queryFn: getPatientOptions,
+  });
+
+  const { data: appts = [], isLoading } = useQuery({
+    queryKey: ['appointments', { date: 'today' }],
+    queryFn: () => apiListAppointments({ date: 'today' }),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: apiCreateAppointment,
+    onSuccess: () => {
+      toast.success('Appointment scheduled');
+      setIsNewAppointmentOpen(false);
+      setForm({ patientId: '', patientName: '', type: '', date: '', time: '', notes: '' });
+      qc.invalidateQueries({ queryKey: ['appointments'] });
+    },
+    onError: (e: any) => toast.error(e?.message || 'Failed to schedule appointment'),
+  });
 
   const getStatusColor = (status: Appointment['status']) => {
     const colors = {
@@ -51,7 +87,7 @@ export default function Appointments() {
     return colors[type];
   };
 
-  const filteredAppointments = mockAppointments.filter(appointment => {
+  const filteredAppointments = appts.filter(appointment => {
     const matchesSearch = appointment.patientName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || appointment.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -80,24 +116,24 @@ export default function Appointments() {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Total Today</span>
-                  <span className="font-medium">{mockAppointments.length}</span>
+                  <span className="font-medium">{appts.length}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Completed</span>
                   <span className="font-medium text-success">
-                    {mockAppointments.filter(a => a.status === 'completed').length}
+                    {appts.filter(a => a.status === 'completed').length}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Waiting</span>
                   <span className="font-medium text-warning">
-                    {mockAppointments.filter(a => a.status === 'waiting').length}
+                    {appts.filter(a => a.status === 'waiting').length}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Cancelled</span>
                   <span className="font-medium text-destructive">
-                    {mockAppointments.filter(a => a.status === 'cancelled').length}
+                    {appts.filter(a => a.status === 'cancelled').length}
                   </span>
                 </div>
               </div>
@@ -151,14 +187,17 @@ export default function Appointments() {
                 <div className="space-y-4 py-4">
                   <div className="space-y-2">
                     <Label>Patient</Label>
-                    <Select>
+                    <Select value={form.patientId} onValueChange={(v)=>{
+                      const opt = patientOptions.find(p=>p.id===v);
+                      setForm(f=>({...f, patientId:v, patientName: opt?.name || '' }));
+                    }}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select patient" />
                       </SelectTrigger>
                       <SelectContent>
-                        {mockPatients.map(patient => (
+                        {patientOptions.map(patient => (
                           <SelectItem key={patient.id} value={patient.id}>
-                            {patient.name} ({patient.id})
+                            {patient.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -167,7 +206,7 @@ export default function Appointments() {
                   
                   <div className="space-y-2">
                     <Label>Appointment Type</Label>
-                    <Select>
+                    <Select value={form.type} onValueChange={(v)=>setForm(f=>({...f,type:v as any}))}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select type" />
                       </SelectTrigger>
@@ -181,12 +220,12 @@ export default function Appointments() {
                   
                   <div className="space-y-2">
                     <Label>Date</Label>
-                    <Input type="date" />
+                    <Input type="date" value={form.date} onChange={(e)=>setForm(f=>({...f,date:e.target.value}))} />
                   </div>
                   
                   <div className="space-y-2">
                     <Label>Time Slot</Label>
-                    <Select>
+                    <Select value={form.time} onValueChange={(v)=>setForm(f=>({...f,time:v}))}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select time" />
                       </SelectTrigger>
@@ -200,12 +239,19 @@ export default function Appointments() {
                   
                   <div className="space-y-2">
                     <Label>Notes (Optional)</Label>
-                    <Input placeholder="Reason for visit..." />
+                    <Input placeholder="Reason for visit..." value={form.notes} onChange={(e)=>setForm(f=>({...f,notes:e.target.value}))} />
                   </div>
                 </div>
                 <div className="flex justify-end gap-3">
                   <Button variant="outline" onClick={() => setIsNewAppointmentOpen(false)}>Cancel</Button>
-                  <Button onClick={() => setIsNewAppointmentOpen(false)}>Schedule</Button>
+                  <Button onClick={() => createMutation.mutate({
+                    patientId: form.patientId,
+                    patientName: form.patientName,
+                    date: form.date,
+                    time: form.time,
+                    type: form.type as any,
+                    notes: form.notes || undefined,
+                  })} disabled={createMutation.isPending}>Schedule</Button>
                 </div>
               </DialogContent>
             </Dialog>
@@ -255,7 +301,9 @@ export default function Appointments() {
                     </div>
                     <div className="min-w-0">
                       <p className="font-medium text-foreground truncate">{appointment.patientName}</p>
-                      <p className="text-sm text-muted-foreground">Dr. {appointment.doctorName.replace('Dr. ', '')}</p>
+                      {appointment.doctorName ? (
+                        <p className="text-sm text-muted-foreground">Dr. {appointment.doctorName.replace('Dr. ', '')}</p>
+                      ) : null}
                     </div>
                   </div>
 
@@ -273,7 +321,15 @@ export default function Appointments() {
                   <div className="flex gap-2 shrink-0">
                     <Button variant="ghost" size="sm">View</Button>
                     {appointment.status === 'scheduled' && (
-                      <Button variant="outline" size="sm">Check In</Button>
+                      <Button variant="outline" size="sm" onClick={async ()=>{
+                        try {
+                          await checkInAppointment(appointment.id);
+                          toast.success('Patient checked in');
+                          qc.invalidateQueries({ queryKey: ['appointments'] });
+                        } catch (e:any) {
+                          toast.error(e?.message || 'Failed to check-in');
+                        }
+                      }}>Check In</Button>
                     )}
                   </div>
                 </div>

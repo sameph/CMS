@@ -28,12 +28,18 @@ export function RequestTable({
   onStart,
   onEnterResults,
   onView,
+  showStart = true,
+  showEnterResults = true,
+  showView = true,
 }: {
   requests: LabRequestListItem[];
   showActions?: boolean;
   onStart?: (r: LabRequestListItem) => void;
   onEnterResults?: (r: LabRequestListItem) => void;
   onView?: (r: LabRequestListItem) => void;
+  showStart?: boolean;
+  showEnterResults?: boolean;
+  showView?: boolean;
 }) {
   const totalTests = (r: LabRequestListItem) => r.tests.reduce((sum, c) => sum + c.items.length, 0);
 
@@ -82,22 +88,24 @@ export function RequestTable({
             {showActions && (
               <TableCell className="text-right">
                 <div className="flex justify-end gap-2">
-                  {r.status === 'pending' && (
+                  {r.status === 'pending' && showStart && (
                     <Button size="sm" variant="outline" onClick={() => onStart?.(r)}>
                       <Play className="h-4 w-4 mr-1" />
                       Start
                     </Button>
                   )}
-                  {r.status === 'in-progress' && (
+                  {r.status === 'in-progress' && showEnterResults && (
                     <Button size="sm" onClick={() => onEnterResults?.(r)}>
                       <Upload className="h-4 w-4 mr-1" />
                       Enter Results
                     </Button>
                   )}
-                  <Button size="sm" variant="ghost" onClick={() => onView?.(r)}>
-                    <FileText className="h-4 w-4 mr-1" />
-                    View
-                  </Button>
+                  {showView && (
+                    <Button size="sm" variant="ghost" onClick={() => onView?.(r)}>
+                      <FileText className="h-4 w-4 mr-1" />
+                      View
+                    </Button>
+                  )}
                 </div>
               </TableCell>
             )}

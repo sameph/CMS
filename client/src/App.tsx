@@ -66,7 +66,7 @@ function AppRoutes() {
       <Route path="/injections" element={<RoleRoute roles={["injection"]}><Prescriptions /></RoleRoute>} />
 
       {/* Pharmacy/Drug store - optional access */}
-      <Route path="/drug-store" element={<RoleRoute roles={["receptionist", "injection"]}><DrugStore /></RoleRoute>} />
+      <Route path="/drug-store" element={<RoleRoute roles={["receptionist", "opd", "injection"]}><DrugStore /></RoleRoute>} />
 
       {/* Settings */}
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />

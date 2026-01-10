@@ -144,6 +144,14 @@ export async function listLabRequests(): Promise<any[]> {
   return apiFetch('/api/lab-requests');
 }
 
+export async function getOpdRequest(id: string): Promise<any> {
+  return apiFetch(`/api/opd/lab-requests/${id}`);
+}
+
+export async function getLabRequest(id: string): Promise<any> {
+  return apiFetch(`/api/lab-requests/${id}`);
+}
+
 export async function createOpdRequest(payload: {
   patientName: string;
   patientId?: string;

@@ -11,6 +11,8 @@ import { LabTestRequestForm } from '@/components/lab/LabTestRequestForm';
 import { RequestTable, formatDate, getStatusColor } from '@/components/lab/RequestTable';
 import { useOpdLabRequests } from '@/hooks/useOpdLabRequests';
 import type { LabRequestListItem } from '@/types/clinic';
+import { useQuery } from '@tanstack/react-query';
+import { getOpdRequest, buildLabelMaps } from '@/services/labRequests';
 
 export default function OPDLabRequests() {
   const {
@@ -27,6 +29,12 @@ export default function OPDLabRequests() {
 
   const [isRequestFormOpen, setIsRequestFormOpen] = useState(false);
   const [selected, setSelected] = useState<LabRequestListItem | null>(null);
+
+  const { data: selectedFull } = useQuery({
+    queryKey: ['opd-request', selected?.id],
+    queryFn: () => getOpdRequest(selected!.id),
+    enabled: !!selected?.id,
+  });
 
   const stats = [
     { icon: Clock, label: 'Pending Requests', value: pending.length, color: 'warning' },
@@ -98,7 +106,14 @@ export default function OPDLabRequests() {
 
           <TabsContent value="pending">
             <div className="rounded-xl border border-border bg-card shadow-card overflow-hidden">
-              <RequestTable requests={pending} showActions={false} onView={setSelected} />
+              <RequestTable 
+                requests={pending} 
+                showActions 
+                showStart={false} 
+                showEnterResults={false} 
+                showView 
+                onView={setSelected} 
+              />
               {pending.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                   <Clock className="h-12 w-12 mb-3 opacity-50" />
@@ -110,7 +125,14 @@ export default function OPDLabRequests() {
 
           <TabsContent value="in-progress">
             <div className="rounded-xl border border-border bg-card shadow-card overflow-hidden">
-              <RequestTable requests={inProgress} showActions={false} onView={setSelected} />
+              <RequestTable 
+                requests={inProgress} 
+                showActions 
+                showStart={false} 
+                showEnterResults={false} 
+                showView 
+                onView={setSelected} 
+              />
               {inProgress.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                   <TestTube className="h-12 w-12 mb-3 opacity-50" />
@@ -122,7 +144,14 @@ export default function OPDLabRequests() {
 
           <TabsContent value="completed">
             <div className="rounded-xl border border-border bg-card shadow-card overflow-hidden">
-              <RequestTable requests={completed} showActions={false} onView={setSelected} />
+              <RequestTable 
+                requests={completed} 
+                showActions 
+                showStart={false} 
+                showEnterResults={false} 
+                showView 
+                onView={setSelected} 
+              />
               {completed.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                   <CheckCircle className="h-12 w-12 mb-3 opacity-50" />
@@ -192,6 +221,47 @@ export default function OPDLabRequests() {
                       ))}
                     </div>
                   </div>
+
+                  {selectedFull?.results && (
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-2">Results</p>
+                      <div className="space-y-2">
+                        {(() => {
+                          const { byKey } = buildLabelMaps(selectedFull.catalog || undefined);
+                          const cats: Array<{ label: 'Hematology'|'Urinalysis'|'Chemistry'|'Serology'; key: keyof typeof selectedFull.results }> = [
+                            { label: 'Hematology', key: 'hematology' },
+                            { label: 'Urinalysis', key: 'urinalysis' },
+                            { label: 'Chemistry', key: 'chemistry' },
+                            { label: 'Serology', key: 'serology' },
+                          ];
+                          return cats.map((c) => {
+                            const res = selectedFull.results?.[c.key] || {};
+                            const normals = selectedFull.normals?.[c.key] || {};
+                            const keys = Object.keys(res);
+                            if (!keys.length) return null;
+                            return (
+                              <div key={c.label} className="rounded-lg border border-border p-3">
+                                <p className="font-medium text-sm mb-2">{c.label}</p>
+                                <div className="space-y-1">
+                                  {keys.map((k: string) => (
+                                    <div key={k} className="flex items-center justify-between text-sm">
+                                      <span className="text-muted-foreground">
+                                        {byKey[c.label]?.[k] || k}
+                                      </span>
+                                      <span className="font-medium">{res[k]}</span>
+                                      {normals[k] && (
+                                        <span className="text-xs text-muted-foreground">Normal: {normals[k]}</span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="flex justify-end">
                   <Button variant="outline" onClick={() => setSelected(null)}>Close</Button>

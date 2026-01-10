@@ -3,17 +3,34 @@ import { StatsCard } from '@/components/dashboard/StatsCard';
 import { PatientQueue } from '@/components/dashboard/PatientQueue';
 import { RecentActivity } from '@/components/dashboard/RecentActivity';
 import { useAuth } from '@/contexts/AuthContext';
-import { mockDashboardStats, mockAppointments, mockLabTests, mockPrescriptions } from '@/data/mockData';
+import { mockDashboardStats, mockLabTests, mockPrescriptions } from '@/data/mockData';
 import { Users, Calendar, TestTube, FileText, DollarSign, Package, AlertTriangle, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { Appointment } from '@/types/clinic';
+import { useQuery } from '@tanstack/react-query';
+import { listAppointments, listWaiting, callNext } from '@/services/appointments';
 
 export default function Dashboard() {
   const { user } = useAuth();
   const stats = mockDashboardStats;
 
-  const handleCallPatient = (appointment: Appointment) => {
-    toast.success(`Calling ${appointment.patientName} to consultation room`);
+  const { data: queueItems = [] } = useQuery({
+    queryKey: ['dashboard-queue', user?.role, user?.id],
+    queryFn: async () => {
+      if (user?.role === 'opd') {
+        return listWaiting({ doctorId: user.id });
+      }
+      return listAppointments({ date: 'today' });
+    },
+  });
+
+  const handleCallPatient = async () => {
+    try {
+      const next = await callNext({ doctorId: user?.id });
+      toast.success(`Calling ${next.patientName} to consultation room`);
+    } catch (e: any) {
+      toast.error(e?.message || 'No waiting patients');
+    }
   };
 
   const getGreeting = () => {
@@ -180,8 +197,8 @@ export default function Dashboard() {
           {/* Patient Queue - Takes 2 columns */}
           <div className="lg:col-span-2">
             <PatientQueue 
-              appointments={mockAppointments} 
-              onCallPatient={user?.role === 'opd' ? handleCallPatient : undefined}
+              appointments={queueItems} 
+              onCallPatient={user?.role === 'opd' ? () => handleCallPatient() : undefined}
             />
           </div>
 
