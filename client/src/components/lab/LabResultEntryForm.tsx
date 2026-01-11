@@ -187,7 +187,7 @@ export function LabResultEntryForm({ open, onOpenChange, request, onSubmit }: La
         )}
 
         {/* Results Entry */}
-        <ScrollArea className="flex-1 pr-4">
+        <ScrollArea className="flex-1 min-h-0 pr-4">
           <div className="space-y-4">
             {request.tests.map(category => (
               <div key={category.category} className="rounded-xl border border-border overflow-hidden">

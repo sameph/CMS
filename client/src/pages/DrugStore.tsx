@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { mockDrugStore } from '@/data/mockData';
-import { DrugStoreItem } from '@/types/clinic';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { listInventory, createInventoryItem } from '@/services/inventory';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -31,13 +31,29 @@ export default function DrugStore() {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const qc = useQueryClient();
 
-  const filteredItems = mockDrugStore.filter(item =>
+  const { data: items = [] } = useQuery({
+    queryKey: ['inventory', 'central'],
+    queryFn: () => listInventory({ location: 'central' }),
+  });
+
+  const addMutation = useMutation({
+    mutationFn: (body: any) => createInventoryItem({ ...body, location: 'central' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inventory', 'central'] });
+      toast.success('Item added to drug store');
+      setIsAddDialogOpen(false);
+    },
+    onError: (e: any) => toast.error(e?.message || 'Failed to add item'),
+  });
+
+  const filteredItems = items.filter(item =>
     item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.category.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const lowStockItems = filteredItems.filter(item => item.quantity <= item.reorderLevel);
+  const lowStockItems = filteredItems.filter(item => (item.reorderLevel ?? 0) >= 0 && item.quantity <= (item.reorderLevel ?? 0));
   const expiringItems = filteredItems.filter(item => {
     const expiryDate = new Date(item.expiryDate);
     const threeMonthsFromNow = new Date();
@@ -53,11 +69,11 @@ export default function DrugStore() {
     });
   };
 
-  const getStockStatus = (item: DrugStoreItem) => {
+  const getStockStatus = (item: any) => {
     if (item.quantity === 0) {
       return { label: 'Out of Stock', color: 'bg-destructive/10 text-destructive border-destructive/20' };
     }
-    if (item.quantity <= item.reorderLevel) {
+    if ((item.reorderLevel ?? 0) >= 0 && item.quantity <= (item.reorderLevel ?? 0)) {
       return { label: 'Low Stock', color: 'bg-warning/10 text-warning border-warning/20' };
     }
     return { label: 'In Stock', color: 'bg-success/10 text-success border-success/20' };
@@ -78,9 +94,20 @@ export default function DrugStore() {
     return { label: 'Valid', color: 'text-muted-foreground' };
   };
 
-  const handleAddItem = () => {
-    toast.success('Item added to drug store');
-    setIsAddDialogOpen(false);
+  const handleAddItem = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const name = String(fd.get('name') || '').trim();
+    if (!name) return toast.error('Item name is required');
+    addMutation.mutate({
+      name,
+      category: String(fd.get('category') || ''),
+      quantity: Number(fd.get('quantity') || 0),
+      unit: String(fd.get('unit') || ''),
+      price: Number(fd.get('price') || 0),
+      reorderLevel: Number(fd.get('reorderLevel') || 0),
+      expiryDate: String(fd.get('expiryDate') || '') || undefined,
+    });
   };
 
   return (
@@ -93,7 +120,7 @@ export default function DrugStore() {
               <Package className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">{mockDrugStore.length}</p>
+              <p className="text-2xl font-bold text-foreground">{items.length}</p>
               <p className="text-sm text-muted-foreground">Total Items</p>
             </div>
           </div>
@@ -102,7 +129,7 @@ export default function DrugStore() {
               <Pill className="h-6 w-6 text-success" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">{mockDrugStore.filter(i => i.quantity > i.reorderLevel).length}</p>
+              <p className="text-2xl font-bold text-foreground">{items.filter(i => (i.reorderLevel ?? -1) >= 0 ? i.quantity > (i.reorderLevel ?? 0) : true).length}</p>
               <p className="text-sm text-muted-foreground">In Stock</p>
             </div>
           </div>
@@ -151,42 +178,42 @@ export default function DrugStore() {
                   <DialogTitle>Add New Item</DialogTitle>
                   <DialogDescription>Add a new medication or supply to the drug store</DialogDescription>
                 </DialogHeader>
-                <div className="space-y-4 py-4">
+                <form className="space-y-4 py-4" onSubmit={handleAddItem}>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="name">Item Name</Label>
-                      <Input id="name" placeholder="e.g., Paracetamol 500mg" />
+                      <Input id="name" name="name" placeholder="e.g., Paracetamol 500mg" required />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="category">Category</Label>
-                      <Input id="category" placeholder="e.g., Analgesic" />
+                      <Input id="category" name="category" placeholder="e.g., Analgesic" />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="quantity">Quantity</Label>
-                      <Input id="quantity" type="number" placeholder="0" />
+                      <Input id="quantity" name="quantity" type="number" placeholder="0" defaultValue={0} />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="unit">Unit</Label>
-                      <Input id="unit" placeholder="e.g., tablets, vials" />
+                      <Input id="unit" name="unit" placeholder="e.g., tablets, vials" />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="price">Price per Unit ($)</Label>
-                      <Input id="price" type="number" step="0.01" placeholder="0.00" />
+                      <Input id="price" name="price" type="number" step="0.01" placeholder="0.00" defaultValue={0} />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="reorderLevel">Reorder Level</Label>
-                      <Input id="reorderLevel" type="number" placeholder="0" />
+                      <Input id="reorderLevel" name="reorderLevel" type="number" placeholder="0" defaultValue={0} />
                     </div>
                     <div className="col-span-2 space-y-2">
                       <Label htmlFor="expiryDate">Expiry Date</Label>
-                      <Input id="expiryDate" type="date" />
+                      <Input id="expiryDate" name="expiryDate" type="date" />
                     </div>
                   </div>
-                </div>
-                <div className="flex justify-end gap-3">
-                  <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
-                  <Button onClick={handleAddItem}>Add Item</Button>
-                </div>
+                  <div className="flex justify-end gap-3">
+                    <Button variant="outline" type="button" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
+                    <Button type="submit" disabled={addMutation.isPending}>Add Item</Button>
+                  </div>
+                </form>
               </DialogContent>
             </Dialog>
           )}

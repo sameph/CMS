@@ -8,6 +8,9 @@ const labRequestRoutes = require('./routes/labRequestRoutes.js');
 const patientRoutes = require('./routes/patientRoutes.js');
 const opdLabRequestRoutes = require('./routes/opdLabRequestRoutes.js');
 const appointmentRoutes = require('./routes/appointmentRoutes.js');
+const inventoryRoutes = require('./routes/inventoryRoutes.js');
+const consultationRoutes = require('./routes/consultationRoutes.js');
+const prescriptionRoutes = require('./routes/prescriptionRoutes.js');
 
 const app = express();
 
@@ -52,6 +55,9 @@ app.use('/api/lab-requests', labRequestRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/opd/lab-requests', opdLabRequestRoutes);
 app.use('/api/appointments', appointmentRoutes);
+app.use('/api/inventory', inventoryRoutes);
+app.use('/api/consultations', consultationRoutes);
+app.use('/api/prescriptions', prescriptionRoutes);
 
 
 

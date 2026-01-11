@@ -24,10 +24,11 @@ import {
 import { Plus, Clock, User, CalendarDays, Search, Filter } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { listAppointments as apiListAppointments, createAppointment as apiCreateAppointment, checkInAppointment } from '@/services/appointments';
+import { listAppointments as apiListAppointments, createAppointment as apiCreateAppointment, checkInAppointment, updateAppointmentStatus } from '@/services/appointments';
 import { getPatients as getPatientOptions } from '@/services/labRequests';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 export default function Appointments() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
@@ -35,6 +36,7 @@ export default function Appointments() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isNewAppointmentOpen, setIsNewAppointmentOpen] = useState(false);
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const { user } = useAuth();
 
   const [form, setForm] = useState({
@@ -319,7 +321,8 @@ export default function Appointments() {
 
                   {/* Actions */}
                   <div className="flex gap-2 shrink-0">
-                    <Button variant="ghost" size="sm">View</Button>
+                    <Button variant="ghost" size="sm" onClick={()=> navigate(`/consultations?patientId=${encodeURIComponent(appointment.patientId)}`)}>View Consultation</Button>
+                    <Button variant="outline" size="sm" onClick={()=> navigate(`/prescriptions?patientId=${encodeURIComponent(appointment.patientId)}&create=1`)}>Prescribe/Dispense</Button>
                     {appointment.status === 'scheduled' && (
                       <Button variant="outline" size="sm" onClick={async ()=>{
                         try {
@@ -330,6 +333,17 @@ export default function Appointments() {
                           toast.error(e?.message || 'Failed to check-in');
                         }
                       }}>Check In</Button>
+                    )}
+                    {appointment.status !== 'completed' && (
+                      <Button variant="default" size="sm" onClick={async ()=>{
+                        try {
+                          await updateAppointmentStatus(appointment.id, 'completed' as any);
+                          toast.success('Appointment completed');
+                          qc.invalidateQueries({ queryKey: ['appointments'] });
+                        } catch (e:any) {
+                          toast.error(e?.message || 'Failed to complete');
+                        }
+                      }}>Complete</Button>
                     )}
                   </div>
                 </div>

@@ -36,6 +36,7 @@ const navItems: NavItem[] = [
   { label: 'Patients', icon: Users, path: '/patients', roles: ['receptionist', 'opd'] },
   { label: 'Appointments', icon: Calendar, path: '/appointments', roles: ['receptionist', 'opd'] },
   { label: 'Consultations', icon: Stethoscope, path: '/consultations', roles: ['opd'] },
+  { label: 'OPD Stock', icon: Package, path: '/opd-stock', roles: ['opd'] },
   { label: 'Lab Requests', icon: TestTube, path: '/opd/lab-requests', roles: ['opd'] },
   { label: 'Lab Dashboard', icon: TestTube, path: '/lab/dashboard', roles: ['laboratory'] },
   { label: 'Prescriptions', icon: FileText, path: '/prescriptions', roles: ['opd', 'injection'] },

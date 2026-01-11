@@ -1,6 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { mockPrescriptions } from '@/data/mockData';
 import { Prescription } from '@/types/clinic';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,12 +23,20 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { listPrescriptions, createPrescription, updatePrescriptionStatus } from '@/services/prescriptions';
+import { listPatients } from '@/services/patients';
+import { listInventory } from '@/services/inventory';
 
 export default function Prescriptions() {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPrescription, setSelectedPrescription] = useState<Prescription | null>(null);
-  const [items, setItems] = useState<Prescription[]>(mockPrescriptions);
+  const qc = useQueryClient();
+  const { data: items = [] } = useQuery({
+    queryKey: ['prescriptions', { q: searchTerm }],
+    queryFn: () => listPrescriptions({ q: searchTerm }),
+  });
   const [createOpen, setCreateOpen] = useState(false);
 
   const getStatusColor = (status: Prescription['status']) => {
@@ -58,10 +65,12 @@ export default function Prescriptions() {
     });
   };
 
-  const handleDispense = (prescription: Prescription) => {
-    toast.success(`Prescription ${prescription.id} marked as dispensed`);
-    setSelectedPrescription(null);
-  };
+  const markDispensed = useMutation({
+    mutationFn: (id: string) => updatePrescriptionStatus(id, 'dispensed'),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['prescriptions'] }); toast.success('Marked as dispensed'); setSelectedPrescription(null); },
+    onError: (e: any) => toast.error(e?.message || 'Failed to update'),
+  });
+  const handleDispense = (prescription: any) => { markDispensed.mutate(prescription._id || prescription.id); };
 
   // Create Prescription state
   const [patientName, setPatientName] = useState('');
@@ -73,15 +82,46 @@ export default function Prescriptions() {
   const [meds, setMeds] = useState<Array<{ name: string; strength: string; dosageForm: string; frequency: string; duration: string; quantity: string; instructions: string }>>([
     { name: '', strength: '', dosageForm: '', frequency: '', duration: '', quantity: '', instructions: '' },
   ]);
+  const [patientSearch, setPatientSearch] = useState('');
+  const [selectedPatientId, setSelectedPatientId] = useState('');
+  const { data: patients = [] } = useQuery({
+    queryKey: ['patients', { q: patientSearch }],
+    queryFn: () => listPatients({ q: patientSearch, limit: 50 }),
+  });
+  const selectedPatient = patients.find(p => p.id === selectedPatientId);
 
-  const addMedRow = () => setMeds((m) => [...m, { name: '', strength: '', dosageForm: '', frequency: '', duration: '', quantity: '', instructions: '' }]);
+  const { data: storeItems = [] } = useQuery({
+    queryKey: ['inventory', { location: 'central' }],
+    queryFn: () => listInventory({ location: 'central' }),
+  });
+  const [storeSearch, setStoreSearch] = useState('');
+  const filteredStore = useMemo(() => {
+    const q = storeSearch.toLowerCase();
+    return storeItems.filter((it: any) => it.name.toLowerCase().includes(q));
+  }, [storeItems, storeSearch]);
+
+  const addMedRow = () => {};
   const removeMedRow = (idx: number) => setMeds((m) => m.filter((_, i) => i !== idx));
   const updateMed = (idx: number, key: keyof typeof meds[number], value: string) => {
     setMeds((m) => m.map((row, i) => i === idx ? { ...row, [key]: value } : row));
   };
 
+  const createRx = useMutation({
+    mutationFn: (body: any) => createPrescription(body),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['prescriptions'] }); toast.success('Prescription created'); setCreateOpen(false); resetCreate(); },
+    onError: (e: any) => toast.error(e?.message || 'Failed to create prescription'),
+  });
+
+  const resetCreate = () => {
+    setPatientName(''); setSex(''); setAge(''); setWeight(''); setInpatient(''); setDiagnosis(''); setMeds([{ name: '', strength: '', dosageForm: '', frequency: '', duration: '', quantity: '', instructions: '' }]);
+  };
+
   const handleCreate = () => {
-    if (!patientName || !sex || !age || !inpatient) {
+    if (!selectedPatient) {
+      toast.error('Select a patient');
+      return;
+    }
+    if (!sex || !age || !inpatient) {
       toast.error('Please fill required patient fields');
       return;
     }
@@ -90,13 +130,11 @@ export default function Prescriptions() {
       toast.error('Add at least one medication');
       return;
     }
-    const newRx: Prescription = {
-      id: `RX${String(Date.now()).slice(-6)}`,
-      patientId: 'N/A',
-      patientName,
+    const payload = {
+      patientId: selectedPatient.id,
+      patientName: selectedPatient.name,
       doctorId: 'OPD',
       doctorName: 'OPD Doctor',
-      date: new Date().toISOString(),
       medications: validMeds.map((m, idx) => ({
         id: `M${idx + 1}`,
         name: `${m.name}${m.strength ? ' ' + m.strength : ''}${m.dosageForm ? ' ' + m.dosageForm : ''}`,
@@ -106,15 +144,19 @@ export default function Prescriptions() {
         quantity: Number(m.quantity) || 0,
         instructions: m.instructions,
       })),
-      status: 'pending',
       notes: diagnosis,
     };
-    setItems((prev) => [newRx, ...prev]);
-    toast.success('Prescription created');
-    // reset
-    setPatientName(''); setSex(''); setAge(''); setWeight(''); setInpatient(''); setDiagnosis(''); setMeds([{ name: '', strength: '', dosageForm: '', frequency: '', duration: '', quantity: '', instructions: '' }]);
-    setCreateOpen(false);
+    createRx.mutate(payload);
   };
+
+  // Preselect patient / open create from URL params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const pid = params.get('patientId');
+    const open = params.get('create');
+    if (pid) setSelectedPatientId(pid);
+    if (open === '1') setCreateOpen(true);
+  }, []);
 
   const PrescriptionCard = ({ prescription }: { prescription: Prescription }) => (
     <div 
@@ -358,7 +400,7 @@ export default function Prescriptions() {
                   <Button variant="outline" onClick={() => setSelectedPrescription(null)}>
                     Close
                   </Button>
-                  {selectedPrescription.status !== 'dispensed' && user?.role === 'injection' && (
+                  {selectedPrescription.status !== 'dispensed' && (user?.role === 'injection' || user?.role === 'opd') && (
                     <Button onClick={() => handleDispense(selectedPrescription)}>
                       <CheckCircle className="h-4 w-4 mr-2" />
                       Mark as Dispensed
@@ -380,9 +422,21 @@ export default function Prescriptions() {
             <div className="space-y-6 py-2">
               {/* Patient Info */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="space-y-1">
-                  <Label>Patient Name</Label>
-                  <Input value={patientName} onChange={(e) => setPatientName(e.target.value)} placeholder="Full name" />
+                <div className="space-y-1 col-span-2">
+                  <Label>Search Patient</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input value={patientSearch} onChange={(e)=>setPatientSearch(e.target.value)} className="pl-9" placeholder="Name, ID, phone" />
+                  </div>
+                </div>
+                <div className="space-y-1 col-span-2">
+                  <Label>Select Patient</Label>
+                  <select className="w-full h-9 rounded-md border bg-background px-3 text-sm" value={selectedPatientId} onChange={(e)=>setSelectedPatientId(e.target.value)}>
+                    <option value="">Choose patient...</option>
+                    {patients.map(p => (
+                      <option key={p.id} value={p.id}>{p.name} ({p.id})</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="space-y-1">
                   <Label>Sex</Label>
@@ -415,9 +469,21 @@ export default function Prescriptions() {
 
               {/* Medications Table */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
                   <h4 className="font-medium">Medications</h4>
-                  <Button size="sm" variant="outline" onClick={addMedRow}>Add Medication</Button>
+                  <div className="flex items-center gap-2">
+                    <Input placeholder="Search store..." value={storeSearch} onChange={(e)=>setStoreSearch(e.target.value)} className="h-9 max-w-[240px]" />
+                    <select className="h-9 rounded-md border bg-background px-2 text-sm min-w-[260px]" onChange={(e)=>{
+                      const id = e.target.value; if(!id) return; const it = filteredStore.find((x:any)=> (x._id||x.id)===id); if(!it) return;
+                      setMeds((m)=>[...m, { name: it.name, strength: '', dosageForm: it.unit||'', frequency: '', duration: '', quantity: '', instructions: '' }]);
+                      e.currentTarget.selectedIndex = 0;
+                    }}>
+                      <option value="">Add from Drug Store...</option>
+                      {filteredStore.map((it:any)=> (
+                        <option key={it._id||it.id} value={it._id||it.id}>{it.name} — {it.quantity} {it.unit}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
                 <div className="rounded-lg border border-border overflow-auto">
                   <div className="grid grid-cols-12 gap-2 p-3 text-xs text-muted-foreground font-medium bg-muted/50">
@@ -433,9 +499,9 @@ export default function Prescriptions() {
                   <div className="p-3 space-y-2">
                     {meds.map((m, idx) => (
                       <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                        <div className="col-span-2"><Input value={m.name} onChange={(e)=>updateMed(idx,'name',e.target.value)} placeholder="e.g., Amoxicillin" /></div>
-                        <div className="col-span-1"><Input value={m.strength} onChange={(e)=>updateMed(idx,'strength',e.target.value)} placeholder="500mg" /></div>
-                        <div className="col-span-2"><Input value={m.dosageForm} onChange={(e)=>updateMed(idx,'dosageForm',e.target.value)} placeholder="tablet, syrup" /></div>
+                        <div className="col-span-2"><Input value={m.name} disabled readOnly placeholder="Drug name" /></div>
+                        <div className="col-span-1"><Input value={m.strength} disabled readOnly placeholder="—" /></div>
+                        <div className="col-span-2"><Input value={m.dosageForm} disabled readOnly placeholder="—" /></div>
                         <div className="col-span-2"><Input value={m.frequency} onChange={(e)=>updateMed(idx,'frequency',e.target.value)} placeholder="3x/day" /></div>
                         <div className="col-span-1"><Input value={m.duration} onChange={(e)=>updateMed(idx,'duration',e.target.value)} placeholder="5d" /></div>
                         <div className="col-span-1"><Input type="number" value={m.quantity} onChange={(e)=>updateMed(idx,'quantity',e.target.value)} placeholder="10" /></div>
