@@ -22,12 +22,14 @@ export interface PrescriptionDoc {
   notes?: string;
 }
 
-export async function listPrescriptions(params: { q?: string; status?: string } = {}): Promise<PrescriptionDoc[]> {
+export async function listPrescriptions(params: { q?: string; status?: string; patientId?: string } = {}): Promise<(PrescriptionDoc & { id: string })[]> {
   const qs = new URLSearchParams();
   if (params.q) qs.set('q', params.q);
   if (params.status) qs.set('status', params.status);
+  if (params.patientId) qs.set('patientId', params.patientId);
   const res = await apiFetch<{ items: PrescriptionDoc[] }>(`/api/prescriptions?${qs.toString()}`);
-  return res.items || [];
+  const items = res.items || [];
+  return items.map((it) => ({ ...it, id: (it as any)._id || (it as any).id }));
 }
 
 export async function createPrescription(body: Omit<PrescriptionDoc, '_id'|'date'|'status'> & { status?: PrescriptionDoc['status'] }): Promise<PrescriptionDoc> {

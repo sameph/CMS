@@ -322,6 +322,7 @@ export default function Appointments() {
                   {/* Actions */}
                   <div className="flex gap-2 shrink-0">
                     <Button variant="ghost" size="sm" onClick={()=> navigate(`/consultations?patientId=${encodeURIComponent(appointment.patientId)}`)}>View Consultation</Button>
+                    <Button variant="ghost" size="sm" onClick={()=> navigate(`/patients/${encodeURIComponent(appointment.patientId)}`)}>History</Button>
                     <Button variant="outline" size="sm" onClick={()=> navigate(`/prescriptions?patientId=${encodeURIComponent(appointment.patientId)}&create=1`)}>Prescribe/Dispense</Button>
                     {appointment.status === 'scheduled' && (
                       <Button variant="outline" size="sm" onClick={async ()=>{

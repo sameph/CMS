@@ -25,6 +25,11 @@ export async function createPatient(body: {
   return mapPatient(res);
 }
 
+export async function getPatient(id: string): Promise<Patient> {
+  const res = await apiFetch<any>(`/api/patients/${id}`);
+  return mapPatient(res);
+}
+
 export async function updatePatient(id: string, body: Partial<{
   name: string;
   dateOfBirth: string; // ISO date

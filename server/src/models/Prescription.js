@@ -22,6 +22,8 @@ const prescriptionSchema = new mongoose.Schema(
     date: { type: Date, default: Date.now },
     medications: [medicationSchema],
     status: { type: String, enum: ['pending', 'dispensed', 'partially-dispensed'], default: 'pending', index: true },
+    paymentStatus: { type: String, enum: ['pending', 'paid'], default: 'pending', index: true },
+    price: { type: Number, default: 0 },
     notes: { type: String },
   },
   { timestamps: true }

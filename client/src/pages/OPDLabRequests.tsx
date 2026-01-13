@@ -198,9 +198,16 @@ export default function OPDLabRequests() {
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Status</p>
-                      <Badge variant="outline" className={cn('capitalize', getStatusColor(selected.status))}>
-                        {selected.status.replace('-', ' ')}
-                      </Badge>
+                      <div className="flex gap-2">
+                        <Badge variant="outline" className={cn('capitalize', getStatusColor(selected.status))}>
+                          {selected.status.replace('-', ' ')}
+                        </Badge>
+                        {selected.paymentStatus && (
+                          <Badge variant={selected.paymentStatus === 'paid' ? 'default' : 'destructive'} className="capitalize">
+                            {selected.paymentStatus}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </div>
 

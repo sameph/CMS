@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useNotifications } from '@/hooks/useNotifications';
 
 interface HeaderProps {
   title: string;
@@ -17,6 +18,7 @@ interface HeaderProps {
 }
 
 export function Header({ title, subtitle }: HeaderProps) {
+  const { items, count } = useNotifications();
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div>
@@ -39,29 +41,26 @@ export function Header({ title, subtitle }: HeaderProps) {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="relative">
               <Bell className="h-5 w-5" />
-              <Badge className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 text-xs bg-destructive">
-                3
-              </Badge>
+              {count > 0 && (
+                <Badge className="absolute -right-1 -top-1 h-5 min-w-[1.25rem] rounded-full px-1 p-0 text-[10px] bg-destructive flex items-center justify-center">
+                  {count > 9 ? '9+' : count}
+                </Badge>
+              )}
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-80">
+          <DropdownMenuContent align="end" className="w-96">
             <DropdownMenuLabel>Notifications</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="flex flex-col items-start gap-1 py-3">
-              <span className="font-medium">New Lab Results Available</span>
-              <span className="text-xs text-muted-foreground">John Smith's CBC results are ready for review</span>
-              <span className="text-xs text-primary">2 minutes ago</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem className="flex flex-col items-start gap-1 py-3">
-              <span className="font-medium">Low Stock Alert</span>
-              <span className="text-xs text-muted-foreground">Amoxicillin 500mg is running low (15 units left)</span>
-              <span className="text-xs text-primary">15 minutes ago</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem className="flex flex-col items-start gap-1 py-3">
-              <span className="font-medium">Appointment Reminder</span>
-              <span className="text-xs text-muted-foreground">Emily Davis consultation in 30 minutes</span>
-              <span className="text-xs text-primary">28 minutes ago</span>
-            </DropdownMenuItem>
+            {items.length === 0 && (
+              <div className="px-3 py-6 text-sm text-muted-foreground">You're all caught up.</div>
+            )}
+            {items.map((n) => (
+              <DropdownMenuItem key={n.id} className="flex flex-col items-start gap-1 py-3">
+                <span className="font-medium">{n.title}</span>
+                {n.description && (<span className="text-xs text-muted-foreground">{n.description}</span>)}
+                {n.time && (<span className="text-xs text-primary">{n.time}</span>)}
+              </DropdownMenuItem>
+            ))}
             <DropdownMenuSeparator />
             <DropdownMenuItem className="justify-center text-primary">
               View all notifications

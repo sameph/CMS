@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { listInventory, createInventoryItem } from '@/services/inventory';
+import { listInventory, createInventoryItem, deleteInventoryItem } from '@/services/inventory';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -46,6 +46,15 @@ export default function DrugStore() {
       setIsAddDialogOpen(false);
     },
     onError: (e: any) => toast.error(e?.message || 'Failed to add item'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteInventoryItem(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inventory', 'central'] });
+      toast.success('Item deleted');
+    },
+    onError: (e:any) => toast.error(e?.message || 'Failed to delete item'),
   });
 
   const filteredItems = items.filter(item =>
@@ -255,8 +264,8 @@ export default function DrugStore() {
                 const stockStatus = getStockStatus(item);
                 const expiryStatus = getExpiryStatus(item.expiryDate);
                 return (
-                  <TableRow key={item.id} className="hover:bg-accent/50">
-                    <TableCell className="font-mono text-sm text-primary">{item.id}</TableCell>
+                  <TableRow key={(item as any)._id || (item as any).id} className="hover:bg-accent/50">
+                    <TableCell className="font-mono text-sm text-primary">{(item as any)._id || (item as any).id}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
@@ -280,11 +289,11 @@ export default function DrugStore() {
                         <span className="text-muted-foreground text-sm">{item.unit}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="font-medium">${item.price.toFixed(2)}</TableCell>
+                    <TableCell className="font-medium">${Number(item.price || 0).toFixed(2)}</TableCell>
                     <TableCell>
                       <div className={cn('flex items-center gap-1', expiryStatus.color)}>
                         <Calendar className="h-3 w-3" />
-                        <span>{formatDate(item.expiryDate)}</span>
+                        <span>{item.expiryDate ? formatDate(item.expiryDate) : '-'}</span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -292,6 +301,16 @@ export default function DrugStore() {
                         {stockStatus.label}
                       </Badge>
                     </TableCell>
+                    {user?.role === 'opd' && (
+                      <TableCell className="text-right">
+                        <Button variant="destructive" size="sm" onClick={() => {
+                          const id = (item as any)._id || (item as any).id;
+                          if (!id) return;
+                          if (!confirm('Delete this item from Drug Store?')) return;
+                          deleteMutation.mutate(id);
+                        }}>Delete</Button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 );
               })}

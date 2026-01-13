@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { listPatients } from '@/services/patients';
@@ -77,6 +77,10 @@ export default function Consultations() {
       qc.invalidateQueries({ queryKey: ['consultations'] });
       toast.success('Consultation saved');
       setOpenPreview(true);
+      if (appointmentId) {
+        completeApptMutation.mutate(appointmentId);
+        qc.invalidateQueries({ queryKey: ['appointments'] });
+      }
     },
     onError: (e: any) => toast.error(e?.message || 'Failed to save consultation'),
   });
@@ -119,6 +123,16 @@ export default function Consultations() {
     setLabsText('');
     setMedicationsText('');
   };
+
+  // Preselect from URL params: ?patientId=...&appointmentId=...
+  // This improves flow from Appointments and Patient History pages
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const pid = params.get('patientId') || '';
+    const apptId = params.get('appointmentId') || '';
+    if (pid) setSelectedPatientId(pid);
+    if (apptId) setAppointmentId(apptId);
+  }, []);
 
   return (
     <DashboardLayout title="Consultations" subtitle="Record comprehensive patient history and plans">

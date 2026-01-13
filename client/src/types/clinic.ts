@@ -120,6 +120,7 @@ export interface LabRequestListItem {
   priority?: 'normal' | 'urgent';
   clinicalNotes?: string;
   status: LabRequestStatus;
+  paymentStatus?: 'pending' | 'paid';
   tests: LabRequestCategoryItems[];
 }
 

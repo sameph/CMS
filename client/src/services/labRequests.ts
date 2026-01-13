@@ -124,6 +124,7 @@ export function mapLabRequestToListItem(doc: any, catalog?: Catalog): LabRequest
     requestDate: doc.createdAt,
     clinicalNotes: doc.notes,
     status: statusMap(doc.status),
+    paymentStatus: doc.paymentStatus,
     tests,
   };
 }
@@ -136,8 +137,11 @@ export async function getLabCatalog(): Promise<Catalog> {
   return apiFetch('/api/lab-requests/catalog');
 }
 
-export async function listOpdRequests(): Promise<any[]> {
-  return apiFetch('/api/opd/lab-requests');
+export async function listOpdRequests(params: { patientId?: string } = {}): Promise<any[]> {
+  const qs = new URLSearchParams();
+  if (params.patientId) qs.set('patientId', params.patientId);
+  const qstr = qs.toString();
+  return apiFetch(`/api/opd/lab-requests${qstr ? `?${qstr}` : ''}`);
 }
 
 export async function listLabRequests(): Promise<any[]> {

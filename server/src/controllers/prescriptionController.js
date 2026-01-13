@@ -4,12 +4,16 @@ function buildFilter(query){
   const f = {};
   if (query.q) f.$or = [{ patientName: { $regex: String(query.q), $options: 'i' } }];
   if (query.status) f.status = query.status;
+  if (query.patientId) f.patientId = query.patientId;
   return f;
 }
 
 async function list(req, res){
   try{
     const filter = buildFilter(req.query||{});
+    if (req.user.role === 'injection') {
+      filter.paymentStatus = 'paid';
+    }
     const items = await Prescription.find(filter).sort({ createdAt: -1 }).lean();
     return res.json({ items });
   }catch(err){

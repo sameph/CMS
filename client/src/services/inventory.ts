@@ -31,3 +31,7 @@ export async function updateInventoryItem(id: string, body: Partial<InventoryIte
 export async function transferStock(body: { itemId: string; quantity: number; to: 'central'|'opd' }): Promise<any> {
   return apiFetch('/api/inventory/transfer', { method: 'POST', body: JSON.stringify(body) });
 }
+
+export async function deleteInventoryItem(id: string): Promise<{ message: string; id: string }> {
+  return apiFetch(`/api/inventory/${id}`, { method: 'DELETE' });
+}

@@ -19,6 +19,7 @@ import NotFound from "./pages/NotFound";
 import type { UserRole } from "@/types/clinic";
 import Consultations from "./pages/Consultations";
 import OPDStock from "./pages/OPDStock";
+import PatientDetails from "./pages/PatientDetails";
 
 const queryClient = new QueryClient();
 
@@ -59,6 +60,7 @@ function AppRoutes() {
       <Route path="/prescriptions" element={<RoleRoute roles={["opd", "injection"]}><Prescriptions /></RoleRoute>} />
       <Route path="/consultations" element={<RoleRoute roles={["opd"]}><Consultations /></RoleRoute>} />
       <Route path="/opd-stock" element={<RoleRoute roles={["opd"]}><OPDStock /></RoleRoute>} />
+      <Route path="/patients/:id" element={<RoleRoute roles={["opd"]}><PatientDetails /></RoleRoute>} />
 
       {/* Lab (split pages) */}
       <Route path="/opd/lab-requests" element={<RoleRoute roles={["opd"]}><OPDLabRequests /></RoleRoute>} />

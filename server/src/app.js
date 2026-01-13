@@ -11,6 +11,7 @@ const appointmentRoutes = require('./routes/appointmentRoutes.js');
 const inventoryRoutes = require('./routes/inventoryRoutes.js');
 const consultationRoutes = require('./routes/consultationRoutes.js');
 const prescriptionRoutes = require('./routes/prescriptionRoutes.js');
+const paymentRoutes = require('./routes/paymentRoutes.js');
 
 const app = express();
 
@@ -47,8 +48,6 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-
-
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/lab-requests', labRequestRoutes);
@@ -58,8 +57,6 @@ app.use('/api/appointments', appointmentRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/consultations', consultationRoutes);
 app.use('/api/prescriptions', prescriptionRoutes);
-
-
-
+app.use('/api/payments', paymentRoutes);
 
 module.exports = app;

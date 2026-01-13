@@ -1,7 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { mockPayments, mockLabTests, mockPrescriptions } from '@/data/mockData';
-import { Payment } from '@/types/clinic';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -27,54 +25,63 @@ import {
   TabsList,
   TabsTrigger,
 } from '@/components/ui/tabs';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Search, DollarSign, Clock, CheckCircle, CreditCard, Banknote, User, FileText, TestTube, Pill, Syringe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { fetchPendingPayments, confirmPayment, PaymentItem } from '@/services/payments';
 
 export default function Payments() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
+  const [selectedPayment, setSelectedPayment] = useState<PaymentItem | null>(null);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('cash');
+  const [cardReference, setCardReference] = useState('');
+  const [pendingPayments, setPendingPayments] = useState<PaymentItem[]>([]);
+  const [completedPayments, setCompletedPayments] = useState<PaymentItem[]>([]); // Keep empty or handle later
+  const [loading, setLoading] = useState(true);
 
-  // Get pending items that need payment
-  const pendingLabPayments = mockLabTests.filter(t => !t.isPaid);
-  const pendingMedPayments = mockPrescriptions.filter(p => p.status === 'pending');
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const data = await fetchPendingPayments();
+      setPendingPayments(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to load payments');
+      setPendingPayments([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const getTypeIcon = (type: Payment['type']) => {
-    const icons = {
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const getTypeIcon = (type: string) => {
+    const icons: Record<string, any> = {
       'consultation': FileText,
       'laboratory': TestTube,
       'medication': Pill,
       'injection': Syringe,
     };
-    return icons[type];
+    return icons[type] || DollarSign;
   };
 
-  const getTypeColor = (type: Payment['type']) => {
-    const colors = {
+  const getTypeColor = (type: string) => {
+    const colors: Record<string, string> = {
       'consultation': 'bg-primary/10 text-primary',
       'laboratory': 'bg-info/10 text-info',
       'medication': 'bg-success/10 text-success',
       'injection': 'bg-warning/10 text-warning',
     };
-    return colors[type];
+    return colors[type] || 'bg-secondary/10 text-secondary-foreground';
   };
 
-  const filteredPayments = mockPayments.filter(payment =>
+  const filteredPayments = (pendingPayments || []).filter(payment =>
     payment.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     payment.id.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  const pendingPayments = filteredPayments.filter(p => p.status === 'pending');
-  const completedPayments = filteredPayments.filter(p => p.status === 'completed');
 
   const todayRevenue = completedPayments.reduce((sum, p) => sum + p.amount, 0);
 
@@ -88,14 +95,30 @@ export default function Payments() {
     });
   };
 
-  const handleProcessPayment = () => {
+  const handleProcessPayment = async () => {
+    if (!selectedPayment) return;
+    if (paymentMethod === 'card' && !cardReference.trim()) {
+      toast.error('Enter card transaction reference');
+      return;
+    }
     setIsProcessingPayment(true);
-    setTimeout(() => {
+    try {
+      await confirmPayment(selectedPayment.id, selectedPayment.type, {
+        method: paymentMethod,
+        reference: paymentMethod === 'card' ? cardReference.trim() : undefined,
+      });
       toast.success('Payment processed successfully');
       setIsProcessingPayment(false);
       setSelectedPayment(null);
-    }, 1500);
+      setCardReference('');
+      loadData(); // Reload list
+    } catch (err) {
+      toast.error('Failed to confirm payment');
+      setIsProcessingPayment(false);
+    }
   };
+
+  const pendingLabPayments = filteredPayments.filter(p => p.type === 'laboratory');
 
   return (
     <DashboardLayout title="Payments" subtitle="Process and manage financial transactions">
@@ -116,7 +139,7 @@ export default function Payments() {
               <Clock className="h-6 w-6 text-warning" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-foreground">{pendingPayments.length}</p>
+              <p className="text-2xl font-bold text-foreground">{filteredPayments.length}</p>
               <p className="text-sm text-muted-foreground">Pending Payments</p>
             </div>
           </div>
@@ -158,7 +181,7 @@ export default function Payments() {
           <TabsList>
             <TabsTrigger value="pending" className="gap-2">
               <Clock className="h-4 w-4" />
-              Pending ({pendingPayments.length})
+              Pending ({filteredPayments.length})
             </TabsTrigger>
             <TabsTrigger value="completed" className="gap-2">
               <CheckCircle className="h-4 w-4" />
@@ -180,108 +203,62 @@ export default function Payments() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pendingPayments.map((payment) => {
-                    const TypeIcon = getTypeIcon(payment.type);
-                    return (
-                      <TableRow key={payment.id} className="hover:bg-accent/50">
-                        <TableCell className="font-mono text-sm text-primary">{payment.id}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary">
-                              <User className="h-4 w-4 text-secondary-foreground" />
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Loading...</TableCell>
+                    </TableRow>
+                  ) : filteredPayments.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                        <div className="flex flex-col items-center justify-center">
+                          <CheckCircle className="h-12 w-12 mb-3 opacity-50" />
+                          <p>No pending payments</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredPayments.map((payment) => {
+                      const TypeIcon = getTypeIcon(payment.type);
+                      return (
+                        <TableRow key={payment.id} className="hover:bg-accent/50">
+                          <TableCell className="font-mono text-sm text-primary">{payment.id.substring(0, 8)}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary">
+                                <User className="h-4 w-4 text-secondary-foreground" />
+                              </div>
+                              <span className="font-medium">{payment.patientName}</span>
                             </div>
-                            <span className="font-medium">{payment.patientName}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={cn('gap-1 capitalize', getTypeColor(payment.type))}>
-                            <TypeIcon className="h-3 w-3" />
-                            {payment.type}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-semibold text-lg">${payment.amount.toFixed(2)}</TableCell>
-                        <TableCell className="text-muted-foreground">{formatDate(payment.date)}</TableCell>
-                        <TableCell className="text-right">
-                          <Button size="sm" onClick={() => setSelectedPayment(payment)}>
-                            <DollarSign className="h-4 w-4 mr-1" />
-                            Process
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={cn('gap-1 capitalize', getTypeColor(payment.type))}>
+                              <TypeIcon className="h-3 w-3" />
+                              {payment.type}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-semibold text-lg">${payment.amount.toFixed(2)}</TableCell>
+                          <TableCell className="text-muted-foreground">{formatDate(payment.date)}</TableCell>
+                          <TableCell className="text-right">
+                            <Button size="sm" onClick={() => setSelectedPayment(payment)}>
+                              <DollarSign className="h-4 w-4 mr-1" />
+                              Process
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
                 </TableBody>
               </Table>
-              {pendingPayments.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                  <CheckCircle className="h-12 w-12 mb-3 opacity-50" />
-                  <p>No pending payments</p>
-                </div>
-              )}
             </div>
           </TabsContent>
 
           <TabsContent value="completed">
-            <div className="rounded-xl border border-border bg-card shadow-card overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead>Payment ID</TableHead>
-                    <TableHead>Patient</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Method</TableHead>
-                    <TableHead>Reference</TableHead>
-                    <TableHead>Date</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {completedPayments.map((payment) => {
-                    const TypeIcon = getTypeIcon(payment.type);
-                    return (
-                      <TableRow key={payment.id} className="hover:bg-accent/50">
-                        <TableCell className="font-mono text-sm text-primary">{payment.id}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary">
-                              <User className="h-4 w-4 text-secondary-foreground" />
-                            </div>
-                            <span className="font-medium">{payment.patientName}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={cn('gap-1 capitalize', getTypeColor(payment.type))}>
-                            <TypeIcon className="h-3 w-3" />
-                            {payment.type}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-semibold">${payment.amount.toFixed(2)}</TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className="gap-1 capitalize">
-                            {payment.method === 'card' ? (
-                              <CreditCard className="h-3 w-3" />
-                            ) : (
-                              <Banknote className="h-3 w-3" />
-                            )}
-                            {payment.method}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-mono text-sm text-muted-foreground">
-                          {payment.reference || '—'}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">{formatDate(payment.date)}</TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-              {completedPayments.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                  <DollarSign className="h-12 w-12 mb-3 opacity-50" />
-                  <p>No completed payments today</p>
-                </div>
-              )}
-            </div>
+            {/* Keeping completed section simple/empty for now as backend endpoint isn't ready */}
+             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <DollarSign className="h-12 w-12 mb-3 opacity-50" />
+                <p>No completed payments visible</p>
+              </div>
           </TabsContent>
         </Tabs>
 
@@ -340,15 +317,15 @@ export default function Payments() {
 
                   {paymentMethod === 'card' && (
                     <div className="space-y-2">
-                      <Label htmlFor="reference">Transaction Reference</Label>
-                      <Input id="reference" placeholder="Enter card transaction reference" />
+                       <Label htmlFor="reference">Transaction Reference</Label>
+                       <Input id="reference" placeholder="Enter card transaction reference" value={cardReference} onChange={(e)=>setCardReference(e.target.value)} />
                     </div>
                   )}
                 </div>
 
                 <div className="flex justify-end gap-3">
                   <Button variant="outline" onClick={() => setSelectedPayment(null)}>Cancel</Button>
-                  <Button onClick={handleProcessPayment} disabled={isProcessingPayment}>
+                  <Button onClick={handleProcessPayment} disabled={isProcessingPayment || (paymentMethod==='card' && !cardReference.trim())}>
                     {isProcessingPayment ? (
                       <>Processing...</>
                     ) : (

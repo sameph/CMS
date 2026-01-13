@@ -102,6 +102,9 @@ const labRequestSchema = new mongoose.Schema(
     requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 
+    paymentStatus: { type: String, enum: ['pending', 'paid'], default: 'pending', index: true },
+    price: { type: Number, default: 0 },
+
     status: { type: String, enum: statusEnum, default: 'requested' },
 
     // What tests are requested (checkbox-like booleans)

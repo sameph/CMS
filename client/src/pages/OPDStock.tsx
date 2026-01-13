@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { listInventory, createInventoryItem, transferStock } from '@/services/inventory';
+import { listInventory, createInventoryItem, transferStock, deleteInventoryItem } from '@/services/inventory';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,6 +31,12 @@ export default function OPDStock() {
     mutationFn: (payload: { itemId: string; quantity: number; to: 'central'|'opd' }) => transferStock(payload),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['inventory', 'opd'] }); qc.invalidateQueries({ queryKey: ['inventory', 'central'] }); setOpenTransfer(null); toast.success('Transferred to Drug Store'); },
     onError: (e: any) => toast.error(e?.message || 'Transfer failed'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteInventoryItem(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['inventory', 'opd'] }); toast.success('Item deleted'); },
+    onError: (e:any) => toast.error(e?.message || 'Delete failed'),
   });
 
   const filtered = useMemo(() => {
@@ -164,7 +170,7 @@ export default function OPDStock() {
                       <div className="flex items-center gap-1 text-muted-foreground"><Calendar className="h-3 w-3" />{formatDate(it.expiryDate)}</div>
                     </TableCell>
                     <TableCell><Badge variant="outline" className={cn(st.color)}>{st.label}</Badge></TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right space-x-2">
                       <Dialog open={openTransfer?._id === it._id} onOpenChange={(o)=>setOpenTransfer(o ? it : null)}>
                         <DialogTrigger asChild>
                           <Button variant="outline" size="sm" className="gap-2"><ArrowRightLeft className="h-4 w-4"/>Transfer to Store</Button>
@@ -177,6 +183,7 @@ export default function OPDStock() {
                           <TransferForm item={it} onTransfer={handleTransferToStore} onCancel={() => setOpenTransfer(null)} />
                         </DialogContent>
                       </Dialog>
+                      <Button variant="destructive" size="sm" onClick={()=>{ if (confirm('Delete this OPD item?')) deleteMutation.mutate(it._id); }}>Delete</Button>
                     </TableCell>
                   </TableRow>
                 );

@@ -123,7 +123,10 @@ async function createRequest(req, res) {
 // - opd: see self requested
 async function listRequests(req, res) {
   try {
-    const q = req.user.role === 'laboratory' ? {} : { requestedBy: req.user._id };
+    const q = req.user.role === 'laboratory' ? { paymentStatus: 'paid' } : { requestedBy: req.user._id };
+    if (req.query && req.query.patientId) {
+      q.patientId = req.query.patientId;
+    }
     const docs = await LabRequest.find(q)
       .sort({ createdAt: -1 })
       .populate('requestedBy', 'name email role')

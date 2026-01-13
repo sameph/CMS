@@ -89,4 +89,15 @@ async function transferStock(req, res) {
   }
 }
 
-module.exports = { listInventory, createInventoryItem, updateInventoryItem, transferStock };
+async function deleteInventoryItem(req, res) {
+  try {
+    const doc = await InventoryItem.findByIdAndDelete(req.params.id);
+    if (!doc) return res.status(404).json({ message: 'Not found' });
+    return res.json({ message: 'Deleted', id: req.params.id });
+  } catch (err) {
+    console.error('deleteInventoryItem error', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
+
+module.exports = { listInventory, createInventoryItem, updateInventoryItem, transferStock, deleteInventoryItem };
